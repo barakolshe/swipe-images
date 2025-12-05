@@ -1,6 +1,7 @@
 import { SwipeableCard } from "@/components/swipeable-card";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import * as MediaLibrary from "expo-media-library";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -29,6 +30,9 @@ export default function HomeScreen() {
   const [markedForDeletion, setMarkedForDeletion] = useState<Set<string>>(
     new Set()
   );
+  const [history, setHistory] = useState<
+    Array<{ index: number; wasLeftSwipe: boolean }>
+  >([]);
   const router = useRouter();
   const params = useLocalSearchParams<{ startImageId?: string }>();
 
@@ -125,6 +129,12 @@ export default function HomeScreen() {
 
     const imageToMark = images[currentIndex];
 
+    // Save current index to history for undo
+    setHistory((prev) => [
+      ...prev,
+      { index: currentIndex, wasLeftSwipe: true },
+    ]);
+
     // Mark image for deletion instead of deleting immediately
     setMarkedForDeletion((prev) => new Set(prev).add(imageToMark.id));
 
@@ -140,6 +150,12 @@ export default function HomeScreen() {
   };
 
   const handleSwipeRight = () => {
+    // Save current index to history for undo
+    setHistory((prev) => [
+      ...prev,
+      { index: currentIndex, wasLeftSwipe: false },
+    ]);
+
     // Just move to next image (keep the image)
     setCurrentIndex((prev) => {
       const next = prev + 1;
@@ -149,6 +165,33 @@ export default function HomeScreen() {
       }
       return next;
     });
+  };
+
+  const handleUndo = () => {
+    if (history.length === 0) {
+      Alert.alert("Nothing to undo", "You haven't swiped any images yet.");
+      return;
+    }
+
+    // Get the last action from history
+    const lastAction = history[history.length - 1];
+    const previousIndex = lastAction.index;
+
+    // If the last action was a left swipe, unmark the image for deletion
+    if (lastAction.wasLeftSwipe && previousIndex < images.length) {
+      const imageToUnmark = images[previousIndex];
+      setMarkedForDeletion((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(imageToUnmark.id);
+        return newSet;
+      });
+    }
+
+    // Go back to previous index
+    setCurrentIndex(previousIndex);
+
+    // Remove the last action from history (but keep the rest for further undos)
+    setHistory((prev) => prev.slice(0, -1));
   };
 
   const handleCommitDeletion = async () => {
@@ -171,8 +214,9 @@ export default function HomeScreen() {
       const newImages = images.filter((img) => !markedSet.has(img.id));
       setImages(newImages);
 
-      // Clear the marked set
+      // Clear the marked set and undo history
       setMarkedForDeletion(new Set());
+      setHistory([]);
 
       // Maintain the current image position
       if (newImages.length === 0) {
@@ -251,6 +295,13 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      {history.length > 0 && (
+        <TouchableOpacity style={styles.undoButton} onPress={handleUndo}>
+          <View>
+            <FontAwesome5 name="undo" size={32} color="#4CAF50" />
+          </View>
+        </TouchableOpacity>
+      )}
       <TouchableOpacity
         style={styles.galleryButton}
         onPress={() => router.push("/gallery")}
@@ -364,5 +415,25 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  undoButton: {
+    position: "absolute",
+    top: 60,
+    left: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    padding: 12,
+    borderRadius: 25,
+    zIndex: 1000,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  undoIconContainer: {
+    transform: [{ rotate: "180deg" }],
   },
 });
