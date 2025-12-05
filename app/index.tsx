@@ -17,17 +17,8 @@ import {
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-type ImageAsset = {
-  id: string;
-  uri: string;
-  creationTime: number;
-};
-
 export default function HomeScreen() {
-  const [images, setImages] = useState<ImageAsset[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [permissionGranted, setPermissionGranted] = useState(false);
   const [history, setHistory] = useState<
     Array<{ index: number; wasLeftSwipe: boolean }>
   >([]);
@@ -40,11 +31,11 @@ export default function HomeScreen() {
     unmarkForDeletion,
     unmarkForKeep,
     clearAll,
+    images,
+    imagesLoading,
+    permissionGranted,
+    refreshImages,
   } = useImageSwipe();
-
-  useEffect(() => {
-    requestPermissions();
-  }, []);
 
   useEffect(() => {
     // Set starting index if provided from gallery (by image ID)
@@ -57,78 +48,6 @@ export default function HomeScreen() {
       }
     }
   }, [params.startImageId, images]);
-
-  const requestPermissions = async () => {
-    try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status === "granted") {
-        setPermissionGranted(true);
-        loadImages();
-      } else {
-        Alert.alert(
-          "Permission Required",
-          "Please grant photo library access to use this app.",
-          [{ text: "OK" }]
-        );
-        setLoading(false);
-      }
-    } catch (error) {
-      console.error("Error requesting permissions:", error);
-      setLoading(false);
-    }
-  };
-
-  const loadImages = async () => {
-    try {
-      setLoading(true);
-      const albums = await MediaLibrary.getAlbumsAsync();
-
-      // Get all images from all albums
-      const allImages: ImageAsset[] = [];
-
-      for (const album of albums) {
-        const assets = await MediaLibrary.getAssetsAsync({
-          album: album,
-          mediaType: MediaLibrary.MediaType.photo,
-          first: 1000, // Adjust as needed
-        });
-
-        assets.assets.forEach((asset: MediaLibrary.Asset) => {
-          allImages.push({
-            id: asset.id,
-            uri: asset.uri,
-            creationTime: asset.creationTime,
-          });
-        });
-      }
-
-      // Also get images not in any album
-      const allAssets = await MediaLibrary.getAssetsAsync({
-        mediaType: MediaLibrary.MediaType.photo,
-        first: 1000,
-      });
-
-      allAssets.assets.forEach((asset: MediaLibrary.Asset) => {
-        if (!allImages.find((img) => img.id === asset.id)) {
-          allImages.push({
-            id: asset.id,
-            uri: asset.uri,
-            creationTime: asset.creationTime,
-          });
-        }
-      });
-
-      // Sort by creation time (newest first, like phone gallery)
-      const sorted = allImages.sort((a, b) => b.creationTime - a.creationTime);
-      setImages(sorted);
-      setCurrentIndex(0);
-    } catch (error) {
-      console.error("Error loading images:", error);
-      Alert.alert("Error", "Failed to load images from your library.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSwipeLeft = () => {
     if (currentIndex >= images.length) return;
@@ -218,56 +137,57 @@ export default function HomeScreen() {
     // Save the current image ID and marked set to maintain position after deletion
     const currentImageId = images[currentIndex]?.id;
     const markedSet = new Set(markedForDeletion);
+    const oldImages = [...images]; // Keep a copy of current images for calculations
 
     try {
       // Delete all marked assets from media library
       await MediaLibrary.deleteAssetsAsync(imageIdsToDelete);
 
-      // Remove from local state
-      const newImages = images.filter((img) => !markedSet.has(img.id));
-      setImages(newImages);
+      // Refresh images from context to get updated list
+      await refreshImages();
 
       // Clear the marked set and undo history
       clearAll();
       setHistory([]);
 
-      // Maintain the current image position
-      if (newImages.length === 0) {
-        Alert.alert("Done!", "All images have been deleted.");
-      } else {
-        // Find the current image in the new array
-        const newIndex = newImages.findIndex(
-          (img) => img.id === currentImageId
-        );
+      // Wait for context to update, then adjust index
+      setTimeout(() => {
+        // Calculate how many images before currentIndex were deleted
+        const deletedBeforeCurrent = oldImages
+          .slice(0, currentIndex)
+          .filter((img) => markedSet.has(img.id)).length;
 
-        if (newIndex !== -1) {
-          // Current image still exists, stay on it
-          setCurrentIndex(newIndex);
+        // Calculate new index: currentIndex minus deleted items before it
+        const adjustedIndex = Math.max(0, currentIndex - deletedBeforeCurrent);
+
+        // Make sure we don't go out of bounds (images will be updated from context)
+        const newImagesCount = images.filter(
+          (img) => !markedSet.has(img.id)
+        ).length;
+        if (newImagesCount === 0) {
+          Alert.alert("Done!", "All images have been deleted.");
+          setCurrentIndex(0);
         } else {
-          // Current image was deleted, adjust index to stay at same position
-          // Count how many images before currentIndex were deleted
-          const deletedBeforeCurrent = images
-            .slice(0, currentIndex)
-            .filter((img) => markedSet.has(img.id)).length;
-
-          // Calculate new index: currentIndex minus deleted items before it
-          const adjustedIndex = Math.max(
-            0,
-            currentIndex - deletedBeforeCurrent
+          // Find the current image in the updated list
+          const newIndex = images.findIndex((img) => img.id === currentImageId);
+          if (newIndex !== -1) {
+            setCurrentIndex(newIndex);
+          } else {
+            setCurrentIndex(Math.min(adjustedIndex, newImagesCount - 1));
+          }
+          Alert.alert(
+            "Success",
+            `Deleted ${imageIdsToDelete.length} image(s).`
           );
-          // Make sure we don't go out of bounds
-          setCurrentIndex(Math.min(adjustedIndex, newImages.length - 1));
         }
-
-        Alert.alert("Success", `Deleted ${imageIdsToDelete.length} image(s).`);
-      }
+      }, 100);
     } catch (error) {
       console.error("Error deleting images:", error);
       Alert.alert("Error", "Failed to delete some images.");
     }
   };
 
-  if (loading) {
+  if (imagesLoading) {
     return (
       <ThemedView style={styles.container}>
         <ActivityIndicator size="large" />
