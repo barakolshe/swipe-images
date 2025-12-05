@@ -1,6 +1,7 @@
 import { SwipeableCard } from "@/components/swipeable-card";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { useImageSwipe } from "@/contexts/image-swipe-context";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import * as MediaLibrary from "expo-media-library";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -27,14 +28,19 @@ export default function HomeScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [permissionGranted, setPermissionGranted] = useState(false);
-  const [markedForDeletion, setMarkedForDeletion] = useState<Set<string>>(
-    new Set()
-  );
   const [history, setHistory] = useState<
     Array<{ index: number; wasLeftSwipe: boolean }>
   >([]);
   const router = useRouter();
   const params = useLocalSearchParams<{ startImageId?: string }>();
+  const {
+    markedForDeletion,
+    markForDeletion,
+    markForKeep,
+    unmarkForDeletion,
+    unmarkForKeep,
+    clearAll,
+  } = useImageSwipe();
 
   useEffect(() => {
     requestPermissions();
@@ -136,7 +142,7 @@ export default function HomeScreen() {
     ]);
 
     // Mark image for deletion instead of deleting immediately
-    setMarkedForDeletion((prev) => new Set(prev).add(imageToMark.id));
+    markForDeletion(imageToMark.id);
 
     // Move to next image
     setCurrentIndex((prev) => {
@@ -150,13 +156,20 @@ export default function HomeScreen() {
   };
 
   const handleSwipeRight = () => {
+    if (currentIndex >= images.length) return;
+
+    const imageToMark = images[currentIndex];
+
     // Save current index to history for undo
     setHistory((prev) => [
       ...prev,
       { index: currentIndex, wasLeftSwipe: false },
     ]);
 
-    // Just move to next image (keep the image)
+    // Mark image for keep
+    markForKeep(imageToMark.id);
+
+    // Move to next image
     setCurrentIndex((prev) => {
       const next = prev + 1;
       if (next >= images.length) {
@@ -177,14 +190,14 @@ export default function HomeScreen() {
     const lastAction = history[history.length - 1];
     const previousIndex = lastAction.index;
 
-    // If the last action was a left swipe, unmark the image for deletion
-    if (lastAction.wasLeftSwipe && previousIndex < images.length) {
+    // Unmark the image based on the last action
+    if (previousIndex < images.length) {
       const imageToUnmark = images[previousIndex];
-      setMarkedForDeletion((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(imageToUnmark.id);
-        return newSet;
-      });
+      if (lastAction.wasLeftSwipe) {
+        unmarkForDeletion(imageToUnmark.id);
+      } else {
+        unmarkForKeep(imageToUnmark.id);
+      }
     }
 
     // Go back to previous index
@@ -215,7 +228,7 @@ export default function HomeScreen() {
       setImages(newImages);
 
       // Clear the marked set and undo history
-      setMarkedForDeletion(new Set());
+      clearAll();
       setHistory([]);
 
       // Maintain the current image position

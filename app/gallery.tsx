@@ -1,7 +1,11 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { useImageSwipe } from "@/contexts/image-swipe-context";
+import { Image } from "expo-image";
 import * as MediaLibrary from "expo-media-library";
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
+import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import {
   ActivityIndicator,
   Alert,
@@ -11,8 +15,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Image } from "expo-image";
-import { useRouter } from "expo-router";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const NUM_COLUMNS = 3;
@@ -30,6 +32,7 @@ export default function GalleryScreen() {
   const [loading, setLoading] = useState(true);
   const [permissionGranted, setPermissionGranted] = useState(false);
   const router = useRouter();
+  const { markedForDeletion, markedForKeep } = useImageSwipe();
 
   useEffect(() => {
     requestPermissions();
@@ -114,6 +117,9 @@ export default function GalleryScreen() {
   };
 
   const renderItem = ({ item }: { item: ImageAsset }) => {
+    const isMarkedForDeletion = markedForDeletion.has(item.id);
+    const isMarkedForKeep = markedForKeep.has(item.id);
+
     return (
       <TouchableOpacity
         style={styles.imageContainer}
@@ -125,6 +131,16 @@ export default function GalleryScreen() {
           style={styles.image}
           contentFit="cover"
         />
+        {isMarkedForDeletion && (
+          <View style={styles.iconContainer}>
+            <FontAwesome5 name="times" size={16} color="#ff0000" />
+          </View>
+        )}
+        {isMarkedForKeep && (
+          <View style={styles.iconContainer}>
+            <FontAwesome5 name="check" size={16} color="#4CAF50" />
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -226,6 +242,20 @@ const styles = StyleSheet.create({
   image: {
     width: "100%",
     height: "100%",
+  },
+  overlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 4,
+  },
+  deletionOverlay: {
+    backgroundColor: "rgba(255, 0, 0, 0.4)", // Opaque red
+  },
+  keepOverlay: {
+    backgroundColor: "rgba(76, 175, 80, 0.4)", // Opaque green (Material Design green)
   },
   loadingText: {
     marginTop: 16,
