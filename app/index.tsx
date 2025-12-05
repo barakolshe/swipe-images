@@ -26,6 +26,9 @@ export default function HomeScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [permissionGranted, setPermissionGranted] = useState(false);
+  const [markedForDeletion, setMarkedForDeletion] = useState<Set<string>>(
+    new Set()
+  );
   const router = useRouter();
   const params = useLocalSearchParams<{ startImageId?: string }>();
 
@@ -117,29 +120,23 @@ export default function HomeScreen() {
     }
   };
 
-  const handleSwipeLeft = async () => {
+  const handleSwipeLeft = () => {
     if (currentIndex >= images.length) return;
 
-    const imageToDelete = images[currentIndex];
+    const imageToMark = images[currentIndex];
 
-    try {
-      // Delete the asset from media library
-      await MediaLibrary.deleteAssetsAsync([imageToDelete.id]);
+    // Mark image for deletion instead of deleting immediately
+    setMarkedForDeletion((prev) => new Set(prev).add(imageToMark.id));
 
-      // Remove from local state
-      const newImages = images.filter((img) => img.id !== imageToDelete.id);
-      setImages(newImages);
-
-      // Don't increment index since we removed an item
-      if (newImages.length === 0) {
+    // Move to next image
+    setCurrentIndex((prev) => {
+      const next = prev + 1;
+      if (next >= images.length) {
         Alert.alert("Done!", "All images have been reviewed.");
+        return prev;
       }
-    } catch (error) {
-      console.error("Error deleting image:", error);
-      Alert.alert("Error", "Failed to delete the image.");
-      // Still move to next image even if deletion failed
-      setCurrentIndex((prev) => Math.min(prev + 1, images.length - 1));
-    }
+      return next;
+    });
   };
 
   const handleSwipeRight = () => {
@@ -152,6 +149,39 @@ export default function HomeScreen() {
       }
       return next;
     });
+  };
+
+  const handleCommitDeletion = async () => {
+    if (markedForDeletion.size === 0) {
+      Alert.alert("No Images", "No images are marked for deletion.");
+      return;
+    }
+
+    const imageIdsToDelete = Array.from(markedForDeletion);
+
+    try {
+      // Delete all marked assets from media library
+      await MediaLibrary.deleteAssetsAsync(imageIdsToDelete);
+
+      // Remove from local state
+      const newImages = images.filter((img) => !markedForDeletion.has(img.id));
+      setImages(newImages);
+
+      // Clear the marked set
+      setMarkedForDeletion(new Set());
+
+      // Adjust current index if needed
+      if (currentIndex >= newImages.length && newImages.length > 0) {
+        setCurrentIndex(newImages.length - 1);
+      } else if (newImages.length === 0) {
+        Alert.alert("Done!", "All images have been deleted.");
+      } else {
+        Alert.alert("Success", `Deleted ${imageIdsToDelete.length} image(s).`);
+      }
+    } catch (error) {
+      console.error("Error deleting images:", error);
+      Alert.alert("Error", "Failed to delete some images.");
+    }
   };
 
   if (loading) {
@@ -213,12 +243,24 @@ export default function HomeScreen() {
         ))}
       </View>
       <View style={styles.infoContainer}>
-        <ThemedText style={styles.infoText}>
-          {currentIndex + 1} / {images.length}
-        </ThemedText>
         <ThemedText style={styles.instructionText}>
-          Swipe left to delete • Swipe right to keep
+          Swipe left to mark for deletion • Swipe right to keep
         </ThemedText>
+        {markedForDeletion.size > 0 && (
+          <ThemedText style={styles.markedCountText}>
+            {markedForDeletion.size} image(s) marked for deletion
+          </ThemedText>
+        )}
+        {markedForDeletion.size > 0 && (
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={handleCommitDeletion}
+          >
+            <ThemedText style={styles.deleteButtonText}>
+              Delete {markedForDeletion.size} Image(s)
+            </ThemedText>
+          </TouchableOpacity>
+        )}
       </View>
     </ThemedView>
   );
@@ -275,6 +317,26 @@ const styles = StyleSheet.create({
   galleryButtonText: {
     color: "#fff",
     fontSize: 14,
+    fontWeight: "600",
+  },
+  markedCountText: {
+    fontSize: 14,
+    opacity: 0.8,
+    marginTop: 8,
+    color: "#ff4444",
+  },
+  deleteButton: {
+    marginTop: 16,
+    backgroundColor: "#ff4444",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 25,
+    minWidth: 200,
+    alignItems: "center",
+  },
+  deleteButtonText: {
+    color: "#fff",
+    fontSize: 16,
     fontWeight: "600",
   },
 });
