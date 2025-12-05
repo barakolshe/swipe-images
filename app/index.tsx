@@ -159,23 +159,49 @@ export default function HomeScreen() {
 
     const imageIdsToDelete = Array.from(markedForDeletion);
 
+    // Save the current image ID and marked set to maintain position after deletion
+    const currentImageId = images[currentIndex]?.id;
+    const markedSet = new Set(markedForDeletion);
+
     try {
       // Delete all marked assets from media library
       await MediaLibrary.deleteAssetsAsync(imageIdsToDelete);
 
       // Remove from local state
-      const newImages = images.filter((img) => !markedForDeletion.has(img.id));
+      const newImages = images.filter((img) => !markedSet.has(img.id));
       setImages(newImages);
 
       // Clear the marked set
       setMarkedForDeletion(new Set());
 
-      // Adjust current index if needed
-      if (currentIndex >= newImages.length && newImages.length > 0) {
-        setCurrentIndex(newImages.length - 1);
-      } else if (newImages.length === 0) {
+      // Maintain the current image position
+      if (newImages.length === 0) {
         Alert.alert("Done!", "All images have been deleted.");
       } else {
+        // Find the current image in the new array
+        const newIndex = newImages.findIndex(
+          (img) => img.id === currentImageId
+        );
+
+        if (newIndex !== -1) {
+          // Current image still exists, stay on it
+          setCurrentIndex(newIndex);
+        } else {
+          // Current image was deleted, adjust index to stay at same position
+          // Count how many images before currentIndex were deleted
+          const deletedBeforeCurrent = images
+            .slice(0, currentIndex)
+            .filter((img) => markedSet.has(img.id)).length;
+
+          // Calculate new index: currentIndex minus deleted items before it
+          const adjustedIndex = Math.max(
+            0,
+            currentIndex - deletedBeforeCurrent
+          );
+          // Make sure we don't go out of bounds
+          setCurrentIndex(Math.min(adjustedIndex, newImages.length - 1));
+        }
+
         Alert.alert("Success", `Deleted ${imageIdsToDelete.length} image(s).`);
       }
     } catch (error) {
