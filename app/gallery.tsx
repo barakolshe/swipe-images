@@ -1,19 +1,23 @@
-import { SwipeableCard } from "@/components/swipeable-card";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import * as MediaLibrary from "expo-media-library";
-import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  FlatList,
   StyleSheet,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Image } from "expo-image";
+import { useRouter } from "expo-router";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const NUM_COLUMNS = 3;
+const GAP = 2;
+const ITEM_SIZE = (SCREEN_WIDTH - GAP * (NUM_COLUMNS + 1)) / NUM_COLUMNS;
 
 type ImageAsset = {
   id: string;
@@ -21,29 +25,15 @@ type ImageAsset = {
   creationTime: number;
 };
 
-export default function HomeScreen() {
+export default function GalleryScreen() {
   const [images, setImages] = useState<ImageAsset[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [permissionGranted, setPermissionGranted] = useState(false);
   const router = useRouter();
-  const params = useLocalSearchParams<{ startImageId?: string }>();
 
   useEffect(() => {
     requestPermissions();
   }, []);
-
-  useEffect(() => {
-    // Set starting index if provided from gallery (by image ID)
-    if (params.startImageId && images.length > 0) {
-      const foundIndex = images.findIndex(
-        (img) => img.id === params.startImageId
-      );
-      if (foundIndex !== -1) {
-        setCurrentIndex(foundIndex);
-      }
-    }
-  }, [params.startImageId, images]);
 
   const requestPermissions = async () => {
     try {
@@ -108,7 +98,6 @@ export default function HomeScreen() {
       // Sort by creation time (newest first, like phone gallery)
       const sorted = allImages.sort((a, b) => b.creationTime - a.creationTime);
       setImages(sorted);
-      setCurrentIndex(0);
     } catch (error) {
       console.error("Error loading images:", error);
       Alert.alert("Error", "Failed to load images from your library.");
@@ -117,41 +106,27 @@ export default function HomeScreen() {
     }
   };
 
-  const handleSwipeLeft = async () => {
-    if (currentIndex >= images.length) return;
-
-    const imageToDelete = images[currentIndex];
-
-    try {
-      // Delete the asset from media library
-      await MediaLibrary.deleteAssetsAsync([imageToDelete.id]);
-
-      // Remove from local state
-      const newImages = images.filter((img) => img.id !== imageToDelete.id);
-      setImages(newImages);
-
-      // Don't increment index since we removed an item
-      if (newImages.length === 0) {
-        Alert.alert("Done!", "All images have been reviewed.");
-      }
-    } catch (error) {
-      console.error("Error deleting image:", error);
-      Alert.alert("Error", "Failed to delete the image.");
-      // Still move to next image even if deletion failed
-      setCurrentIndex((prev) => Math.min(prev + 1, images.length - 1));
-    }
+  const handleImagePress = (imageId: string) => {
+    router.push({
+      pathname: "/",
+      params: { startImageId: imageId },
+    });
   };
 
-  const handleSwipeRight = () => {
-    // Just move to next image (keep the image)
-    setCurrentIndex((prev) => {
-      const next = prev + 1;
-      if (next >= images.length) {
-        Alert.alert("Done!", "All images have been reviewed.");
-        return prev;
-      }
-      return next;
-    });
+  const renderItem = ({ item }: { item: ImageAsset }) => {
+    return (
+      <TouchableOpacity
+        style={styles.imageContainer}
+        onPress={() => handleImagePress(item.id)}
+        activeOpacity={0.7}
+      >
+        <Image
+          source={{ uri: item.uri }}
+          style={styles.image}
+          contentFit="cover"
+        />
+      </TouchableOpacity>
+    );
   };
 
   if (loading) {
@@ -191,35 +166,25 @@ export default function HomeScreen() {
     );
   }
 
-  const visibleCards = images.slice(currentIndex, currentIndex + 3);
-
   return (
     <ThemedView style={styles.container}>
-      <TouchableOpacity
-        style={styles.galleryButton}
-        onPress={() => router.push("/gallery")}
-      >
-        <ThemedText style={styles.galleryButtonText}>📷 Gallery</ThemedText>
-      </TouchableOpacity>
-      <View style={styles.cardsContainer}>
-        {visibleCards.map((image, index) => (
-          <SwipeableCard
-            key={image.id}
-            imageUri={image.uri}
-            onSwipeLeft={handleSwipeLeft}
-            onSwipeRight={handleSwipeRight}
-            index={index}
-          />
-        ))}
-      </View>
-      <View style={styles.infoContainer}>
-        <ThemedText style={styles.infoText}>
-          {currentIndex + 1} / {images.length}
+      <View style={styles.header}>
+        <ThemedText type="title" style={styles.headerTitle}>
+          Photo Gallery
         </ThemedText>
-        <ThemedText style={styles.instructionText}>
-          Swipe left to delete • Swipe right to keep
+        <ThemedText style={styles.headerSubtitle}>
+          Tap a photo to start swiping from there
         </ThemedText>
       </View>
+      <FlatList
+        data={images}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
+        numColumns={NUM_COLUMNS}
+        contentContainerStyle={styles.listContent}
+        columnWrapperStyle={styles.row}
+        showsVerticalScrollIndicator={false}
+      />
     </ThemedView>
   );
 }
@@ -227,29 +192,40 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
     paddingTop: 60,
   },
-  cardsContainer: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT * 0.7,
-    alignItems: "center",
-    justifyContent: "center",
+  header: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.1)",
   },
-  infoContainer: {
-    position: "absolute",
-    bottom: 60,
-    alignItems: "center",
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: "bold",
+    marginBottom: 4,
   },
-  infoText: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  instructionText: {
+  headerSubtitle: {
     fontSize: 14,
     opacity: 0.7,
+  },
+  listContent: {
+    padding: GAP,
+  },
+  row: {
+    justifyContent: "flex-start",
+    gap: GAP,
+  },
+  imageContainer: {
+    width: ITEM_SIZE,
+    height: ITEM_SIZE,
+    borderRadius: 4,
+    overflow: "hidden",
+    backgroundColor: "#f0f0f0",
+  },
+  image: {
+    width: "100%",
+    height: "100%",
   },
   loadingText: {
     marginTop: 16,
@@ -261,20 +237,5 @@ const styles = StyleSheet.create({
   subtitle: {
     textAlign: "center",
     paddingHorizontal: 20,
-  },
-  galleryButton: {
-    position: "absolute",
-    top: 60,
-    right: 20,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    zIndex: 1000,
-  },
-  galleryButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
   },
 });
