@@ -5,7 +5,6 @@ import { Image } from "expo-image";
 import * as MediaLibrary from "expo-media-library";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import {
   ActivityIndicator,
   Alert,
@@ -131,15 +130,13 @@ export default function GalleryScreen() {
           style={styles.image}
           contentFit="cover"
         />
-        {isMarkedForDeletion && (
-          <View style={styles.iconContainer}>
-            <FontAwesome5 name="times" size={16} color="#ff0000" />
-          </View>
-        )}
-        {isMarkedForKeep && (
-          <View style={styles.iconContainer}>
-            <FontAwesome5 name="check" size={16} color="#4CAF50" />
-          </View>
+        {(isMarkedForDeletion || isMarkedForKeep) && (
+          <View
+            style={[
+              styles.overlay,
+              isMarkedForDeletion ? styles.deletionOverlay : styles.keepOverlay,
+            ]}
+          />
         )}
       </TouchableOpacity>
     );
