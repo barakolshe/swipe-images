@@ -29,12 +29,15 @@ type ImageSwipeState = {
   refreshImages: () => Promise<void>;
   removeFromPersistedKeep: (imageIds: string[]) => Promise<void>;
   removeFromPersistedDeletion: (imageIds: string[]) => Promise<void>;
+  saveLastViewedImage: (imageId: string) => Promise<void>;
+  loadLastViewedImage: () => Promise<string | null>;
 };
 
 const ImageSwipeContext = createContext<ImageSwipeState | undefined>(undefined);
 
 const KEPT_IMAGES_STORAGE_KEY = "@swipe:kept_images";
 const DELETION_IMAGES_STORAGE_KEY = "@swipe:deletion_images";
+const LAST_VIEWED_IMAGE_KEY = "@swipe:last_viewed_image";
 
 export function ImageSwipeProvider({ children }: { children: ReactNode }) {
   const [markedForDeletion, setMarkedForDeletion] = useState<Set<string>>(
@@ -118,6 +121,25 @@ export function ImageSwipeProvider({ children }: { children: ReactNode }) {
       await savePersistedDeletionImages(currentDeletion);
     } catch (error) {
       console.error("Error removing from persisted deletion:", error);
+    }
+  };
+
+  // Save last viewed image ID
+  const saveLastViewedImage = async (imageId: string) => {
+    try {
+      await AsyncStorage.setItem(LAST_VIEWED_IMAGE_KEY, imageId);
+    } catch (error) {
+      console.error("Error saving last viewed image:", error);
+    }
+  };
+
+  // Load last viewed image ID
+  const loadLastViewedImage = async (): Promise<string | null> => {
+    try {
+      return await AsyncStorage.getItem(LAST_VIEWED_IMAGE_KEY);
+    } catch (error) {
+      console.error("Error loading last viewed image:", error);
+      return null;
     }
   };
 
@@ -280,6 +302,8 @@ export function ImageSwipeProvider({ children }: { children: ReactNode }) {
         refreshImages,
         removeFromPersistedKeep,
         removeFromPersistedDeletion,
+        saveLastViewedImage,
+        loadLastViewedImage,
       }}
     >
       {children}

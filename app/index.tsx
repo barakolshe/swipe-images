@@ -5,7 +5,7 @@ import { useImageSwipe } from "@/contexts/image-swipe-context";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import * as MediaLibrary from "expo-media-library";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -27,6 +27,7 @@ export default function HomeScreen() {
     imageIndex: number;
     wasLeftSwipe: boolean;
   } | null>(null);
+  const initialPositionLoadedRef = useRef(false);
   const router = useRouter();
   const params = useLocalSearchParams<{ startImageId?: string }>();
   const {
@@ -42,19 +43,63 @@ export default function HomeScreen() {
     refreshImages,
     removeFromPersistedKeep,
     removeFromPersistedDeletion,
+    saveLastViewedImage,
+    loadLastViewedImage,
   } = useImageSwipe();
 
+  // Load initial position only once when images are first loaded
   useEffect(() => {
+    if (
+      imagesLoading ||
+      initialPositionLoadedRef.current ||
+      images.length === 0
+    ) {
+      return;
+    }
+
     // Set starting index if provided from gallery (by image ID)
-    if (params.startImageId && images.length > 0) {
+    if (params.startImageId) {
       const foundIndex = images.findIndex(
         (img) => img.id === params.startImageId
       );
       if (foundIndex !== -1) {
         setCurrentIndex(foundIndex);
       }
+      initialPositionLoadedRef.current = true;
+      return;
     }
-  }, [params.startImageId, images]);
+
+    // Load last viewed image if no startImageId is provided (only once)
+    loadLastViewedImage().then((lastImageId) => {
+      // Double-check flag in case component unmounted or state changed
+      if (
+        lastImageId &&
+        images.length > 0 &&
+        !initialPositionLoadedRef.current
+      ) {
+        const foundIndex = images.findIndex((img) => img.id === lastImageId);
+        if (foundIndex !== -1) {
+          setCurrentIndex(foundIndex);
+        }
+      }
+      initialPositionLoadedRef.current = true;
+    });
+  }, [imagesLoading, images.length, params.startImageId, loadLastViewedImage]);
+
+  // Save current image ID whenever index changes (but only after initial load)
+  useEffect(() => {
+    if (
+      !initialPositionLoadedRef.current ||
+      images.length === 0 ||
+      currentIndex >= images.length
+    ) {
+      return;
+    }
+    const currentImage = images[currentIndex];
+    if (currentImage) {
+      saveLastViewedImage(currentImage.id);
+    }
+  }, [currentIndex, images, saveLastViewedImage]);
 
   const handleSwipeLeft = () => {
     if (currentIndex >= images.length) return;
