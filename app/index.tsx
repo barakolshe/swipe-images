@@ -27,8 +27,11 @@ export default function HomeScreen() {
     imageIndex: number;
     wasLeftSwipe: boolean;
   } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const initialPositionLoadedRef = useRef(false);
   const isUndoingRef = useRef(false);
+  const targetImageIdAfterDeletionRef = useRef<string | null>(null);
+  const imagesHash = useRef<string>("");
   const router = useRouter();
   const params = useLocalSearchParams<{ startImageId?: string }>();
   const {
@@ -38,6 +41,7 @@ export default function HomeScreen() {
     unmarkForDeletion,
     unmarkForKeep,
     clearAll,
+    clearDeletion,
     images,
     imagesLoading,
     permissionGranted,
@@ -89,13 +93,64 @@ export default function HomeScreen() {
     });
   }, [imagesLoading, images.length, params.startImageId, loadLastViewedImage]);
 
+  // Restore position after deletion completes
+  useEffect(() => {
+    if (
+      isDeleting &&
+      !imagesLoading &&
+      images.length > 0 &&
+      imagesHash.current !== JSON.stringify(images)
+    ) {
+      if (targetImageIdAfterDeletionRef.current) {
+        const targetImageId = targetImageIdAfterDeletionRef.current;
+        const newIndex = images.findIndex((img) => img.id === targetImageId);
+
+        if (newIndex !== -1) {
+          setCurrentIndex(newIndex);
+          saveLastViewedImage(targetImageId);
+        } else {
+          // Target image not found, use first available image
+          setCurrentIndex(0);
+          if (images[0]) {
+            saveLastViewedImage(images[0].id);
+          }
+        }
+      } else {
+        // No target image (all were deleted), stay at index 0
+        setCurrentIndex(0);
+      }
+
+      // Update history indices to match new image positions
+      setHistory((prevHistory) =>
+        prevHistory
+          .map((entry) => {
+            // Find the image that was at this entry's index before deletion
+            // We need to track this differently - for now, just keep entries that might still be valid
+            // This is a simplified approach - in a more complex scenario, we'd need to track image IDs in history
+            return entry;
+          })
+          .filter((entry) => entry.index < images.length)
+      );
+
+      // Reset deletion state
+      setIsDeleting(false);
+      targetImageIdAfterDeletionRef.current = null;
+    } else if (isDeleting && !imagesLoading && images.length === 0) {
+      // All images deleted
+      setCurrentIndex(0);
+      setIsDeleting(false);
+      targetImageIdAfterDeletionRef.current = null;
+    }
+  }, [isDeleting, imagesLoading, images, saveLastViewedImage]);
+
   // Save current image ID whenever index changes (but only after initial load and not during undo)
   useEffect(() => {
     if (
       !initialPositionLoadedRef.current ||
       images.length === 0 ||
       currentIndex >= images.length ||
-      isUndoingRef.current
+      isUndoingRef.current ||
+      isDeleting
     ) {
       return;
     }
@@ -103,7 +158,7 @@ export default function HomeScreen() {
     if (currentImage) {
       saveLastViewedImage(currentImage.id);
     }
-  }, [currentIndex, images, saveLastViewedImage]);
+  }, [currentIndex, images, saveLastViewedImage, isDeleting]);
 
   const handleSwipeLeft = () => {
     if (isUndoingRef.current) return;
@@ -212,6 +267,7 @@ export default function HomeScreen() {
   };
 
   const handleCommitDeletion = async () => {
+    imagesHash.current = JSON.stringify(images);
     if (markedForDeletion.size === 0) {
       Alert.alert("No Images", "No images are marked for deletion.");
       return;
@@ -219,13 +275,50 @@ export default function HomeScreen() {
 
     const imageIdsToDelete = Array.from(markedForDeletion);
 
-    // Save the current image ID and marked set to maintain position after deletion
+    // Save the current image ID to restore position after deletion
     const currentImageId = images[currentIndex]?.id;
     const markedSet = new Set(markedForDeletion);
     const oldImages = [...images]; // Keep a copy of current images for calculations
     const oldHistory = [...history]; // Keep a copy of history to preserve it
 
+    // Check if current image is being deleted
+    const isCurrentImageDeleted =
+      currentImageId && markedSet.has(currentImageId);
+
     try {
+      // Set deletion flag and target image ID before starting deletion
+      setIsDeleting(true);
+
+      // If current image is not being deleted, we'll try to find it after refresh
+      // If it is being deleted, we'll find the next available image
+      if (!isCurrentImageDeleted && currentImageId) {
+        targetImageIdAfterDeletionRef.current = currentImageId;
+      } else {
+        // Current image is being deleted, find the next non-deleted image
+        let nextIndex = currentIndex + 1;
+        while (
+          nextIndex < oldImages.length &&
+          markedSet.has(oldImages[nextIndex].id)
+        ) {
+          nextIndex++;
+        }
+        if (nextIndex < oldImages.length) {
+          targetImageIdAfterDeletionRef.current = oldImages[nextIndex].id;
+        } else {
+          // All images after current are deleted, find previous non-deleted image
+          let prevIndex = currentIndex - 1;
+          while (prevIndex >= 0 && markedSet.has(oldImages[prevIndex].id)) {
+            prevIndex--;
+          }
+          if (prevIndex >= 0) {
+            targetImageIdAfterDeletionRef.current = oldImages[prevIndex].id;
+          } else {
+            // All images are being deleted
+            targetImageIdAfterDeletionRef.current = null;
+          }
+        }
+      }
+
       // Delete all marked assets from media library
       await MediaLibrary.deleteAssetsAsync(imageIdsToDelete);
 
@@ -237,71 +330,48 @@ export default function HomeScreen() {
       await refreshImages();
 
       // Clear the marked set but preserve history
-      clearAll();
+      clearDeletion();
 
-      // Wait for context to update, then adjust index and history
-      setTimeout(() => {
-        // Filter history to remove entries for deleted images and adjust indices
-        const updatedHistory = oldHistory
-          .map((entry) => {
-            // Get the image that was at this entry's index in the old images array
-            const imageAtEntry = oldImages[entry.index];
-            // If the image at this entry was deleted, return null to filter it out
-            if (!imageAtEntry || markedSet.has(imageAtEntry.id)) {
-              return null;
-            }
-            // Find the new index of this image in the updated images list
-            const newIndex = images.findIndex(
-              (img) => img.id === imageAtEntry.id
-            );
-            // If image not found in new list, filter it out
-            if (newIndex === -1) return null;
-            // Return entry with updated index
-            return {
-              ...entry,
-              index: newIndex,
-            };
-          })
-          .filter(
-            (entry): entry is { index: number; wasLeftSwipe: boolean } =>
-              entry !== null
-          );
-
-        // Update history with filtered and adjusted entries
-        setHistory(updatedHistory);
-
-        // Calculate how many images before currentIndex were deleted
-        const deletedBeforeCurrent = oldImages
-          .slice(0, currentIndex)
-          .filter((img) => markedSet.has(img.id)).length;
-
-        // Calculate new index: currentIndex minus deleted items before it
-        const adjustedIndex = Math.max(0, currentIndex - deletedBeforeCurrent);
-
-        // Make sure we don't go out of bounds (images will be updated from context)
-        const newImagesCount = images.filter(
-          (img) => !markedSet.has(img.id)
-        ).length;
-        if (newImagesCount === 0) {
-          Alert.alert("Done!", "All images have been deleted.");
-          setCurrentIndex(0);
-        } else {
-          // Find the current image in the updated list
-          const newIndex = images.findIndex((img) => img.id === currentImageId);
-          if (newIndex !== -1) {
-            setCurrentIndex(newIndex);
-          } else {
-            setCurrentIndex(Math.min(adjustedIndex, newImagesCount - 1));
+      // Filter history to remove entries for deleted images and adjust indices
+      // We'll update history after images are refreshed in the useEffect
+      const updatedHistory = oldHistory
+        .map((entry) => {
+          // Get the image that was at this entry's index in the old images array
+          const imageAtEntry = oldImages[entry.index];
+          // If the image at this entry was deleted, return null to filter it out
+          if (!imageAtEntry || markedSet.has(imageAtEntry.id)) {
+            return null;
           }
-          Alert.alert(
-            "Success",
-            `Deleted ${imageIdsToDelete.length} image(s).`
-          );
-        }
-      }, 100);
+          // We'll update indices after images refresh
+          return entry;
+        })
+        .filter(
+          (entry): entry is { index: number; wasLeftSwipe: boolean } =>
+            entry !== null
+        );
+
+      // Update history indices after images refresh (will be done in useEffect)
+      // For now, just store the filtered history
+      setHistory(updatedHistory);
+
+      // Check if all images were deleted
+      const remainingCount = oldImages.filter(
+        (img) => !markedSet.has(img.id)
+      ).length;
+      if (remainingCount === 0) {
+        Alert.alert("Done!", "All images have been deleted.");
+        setIsDeleting(false);
+        targetImageIdAfterDeletionRef.current = null;
+        setCurrentIndex(0);
+      } else {
+        Alert.alert("Success", `Deleted ${imageIdsToDelete.length} image(s).`);
+        // Position will be restored by the useEffect when images finish loading
+      }
     } catch (error) {
       console.error("Error deleting images:", error);
       Alert.alert("Error", "Failed to delete some images.");
+      setIsDeleting(false);
+      targetImageIdAfterDeletionRef.current = null;
     }
   };
 

@@ -3,6 +3,7 @@ import * as MediaLibrary from "expo-media-library";
 import React, {
   createContext,
   ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -26,6 +27,7 @@ type ImageSwipeState = {
   unmarkForDeletion: (imageId: string) => void;
   unmarkForKeep: (imageId: string) => void;
   clearAll: () => void;
+  clearDeletion: () => void;
   refreshImages: () => Promise<void>;
   removeFromPersistedKeep: (imageIds: string[]) => Promise<void>;
   removeFromPersistedDeletion: (imageIds: string[]) => Promise<void>;
@@ -125,23 +127,23 @@ export function ImageSwipeProvider({ children }: { children: ReactNode }) {
   };
 
   // Save last viewed image ID
-  const saveLastViewedImage = async (imageId: string) => {
+  const saveLastViewedImage = useCallback(async (imageId: string) => {
     try {
       await AsyncStorage.setItem(LAST_VIEWED_IMAGE_KEY, imageId);
     } catch (error) {
       console.error("Error saving last viewed image:", error);
     }
-  };
+  }, []);
 
   // Load last viewed image ID
-  const loadLastViewedImage = async (): Promise<string | null> => {
+  const loadLastViewedImage = useCallback(async (): Promise<string | null> => {
     try {
       return await AsyncStorage.getItem(LAST_VIEWED_IMAGE_KEY);
     } catch (error) {
       console.error("Error loading last viewed image:", error);
       return null;
     }
-  };
+  }, []);
 
   const loadImages = async () => {
     try {
@@ -262,6 +264,10 @@ export function ImageSwipeProvider({ children }: { children: ReactNode }) {
     setMarkedForKeep(new Set());
   };
 
+  const clearDeletion = () => {
+    setMarkedForDeletion(new Set());
+  };
+
   return (
     <ImageSwipeContext.Provider
       value={{
@@ -275,6 +281,7 @@ export function ImageSwipeProvider({ children }: { children: ReactNode }) {
         unmarkForDeletion,
         unmarkForKeep,
         clearAll,
+        clearDeletion,
         refreshImages,
         removeFromPersistedKeep,
         removeFromPersistedDeletion,
