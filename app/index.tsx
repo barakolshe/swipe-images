@@ -114,16 +114,6 @@ export default function HomeScreen() {
     const lastAction = history[history.length - 1];
     const previousIndex = lastAction.index;
 
-    // Unmark the image based on the last action
-    if (previousIndex < images.length) {
-      const imageToUnmark = images[previousIndex];
-      if (lastAction.wasLeftSwipe) {
-        unmarkForDeletion(imageToUnmark.id);
-      } else {
-        unmarkForKeep(imageToUnmark.id);
-      }
-    }
-
     // Store undo animation info before changing index
     setUndoAnimationInfo({
       imageIndex: previousIndex,
@@ -160,6 +150,7 @@ export default function HomeScreen() {
     const currentImageId = images[currentIndex]?.id;
     const markedSet = new Set(markedForDeletion);
     const oldImages = [...images]; // Keep a copy of current images for calculations
+    const oldHistory = [...history]; // Keep a copy of history to preserve it
 
     try {
       // Delete all marked assets from media library
@@ -168,12 +159,40 @@ export default function HomeScreen() {
       // Refresh images from context to get updated list
       await refreshImages();
 
-      // Clear the marked set and undo history
+      // Clear the marked set but preserve history
       clearAll();
-      setHistory([]);
 
-      // Wait for context to update, then adjust index
+      // Wait for context to update, then adjust index and history
       setTimeout(() => {
+        // Filter history to remove entries for deleted images and adjust indices
+        const updatedHistory = oldHistory
+          .map((entry) => {
+            // Get the image that was at this entry's index in the old images array
+            const imageAtEntry = oldImages[entry.index];
+            // If the image at this entry was deleted, return null to filter it out
+            if (!imageAtEntry || markedSet.has(imageAtEntry.id)) {
+              return null;
+            }
+            // Find the new index of this image in the updated images list
+            const newIndex = images.findIndex(
+              (img) => img.id === imageAtEntry.id
+            );
+            // If image not found in new list, filter it out
+            if (newIndex === -1) return null;
+            // Return entry with updated index
+            return {
+              ...entry,
+              index: newIndex,
+            };
+          })
+          .filter(
+            (entry): entry is { index: number; wasLeftSwipe: boolean } =>
+              entry !== null
+          );
+
+        // Update history with filtered and adjusted entries
+        setHistory(updatedHistory);
+
         // Calculate how many images before currentIndex were deleted
         const deletedBeforeCurrent = oldImages
           .slice(0, currentIndex)
