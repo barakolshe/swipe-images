@@ -53,7 +53,8 @@ export default function HomeScreen() {
     if (
       imagesLoading ||
       initialPositionLoadedRef.current ||
-      images.length === 0
+      images.length === 0 ||
+      isUndoingRef.current
     ) {
       return;
     }
@@ -76,7 +77,8 @@ export default function HomeScreen() {
       if (
         lastImageId &&
         images.length > 0 &&
-        !initialPositionLoadedRef.current
+        !initialPositionLoadedRef.current &&
+        !isUndoingRef.current
       ) {
         const foundIndex = images.findIndex((img) => img.id === lastImageId);
         if (foundIndex !== -1) {
@@ -104,15 +106,14 @@ export default function HomeScreen() {
   }, [currentIndex, images, saveLastViewedImage]);
 
   const handleSwipeLeft = () => {
+    if (isUndoingRef.current) return;
     if (currentIndex >= images.length) return;
 
     const imageToMark = images[currentIndex];
+    const currentIdx = currentIndex;
 
     // Save current index to history for undo
-    setHistory((prev) => [
-      ...prev,
-      { index: currentIndex, wasLeftSwipe: true },
-    ]);
+    setHistory((prev) => [...prev, { index: currentIdx, wasLeftSwipe: true }]);
 
     // Mark image for deletion instead of deleting immediately
     markForDeletion(imageToMark.id);
@@ -129,15 +130,14 @@ export default function HomeScreen() {
   };
 
   const handleSwipeRight = () => {
+    if (isUndoingRef.current) return;
     if (currentIndex >= images.length) return;
 
     const imageToMark = images[currentIndex];
+    const currentIdx = currentIndex;
 
     // Save current index to history for undo
-    setHistory((prev) => [
-      ...prev,
-      { index: currentIndex, wasLeftSwipe: false },
-    ]);
+    setHistory((prev) => [...prev, { index: currentIdx, wasLeftSwipe: false }]);
 
     // Mark image for keep
     markForKeep(imageToMark.id);
@@ -159,17 +159,23 @@ export default function HomeScreen() {
       return;
     }
 
+    // Prevent multiple undos from running simultaneously
+    if (isUndoingRef.current) {
+      return;
+    }
+
     // Get the last action from history
     const lastAction = history[history.length - 1];
     const previousIndex = lastAction.index;
 
+    // Validate the index
     if (previousIndex >= images.length || previousIndex < 0) {
       // Index no longer valid, just remove from history
       setHistory((prev) => prev.slice(0, -1));
       return;
     }
 
-    // Set flag to prevent save effect from running during undo
+    // Set flag to prevent save effect and other operations from running during undo
     isUndoingRef.current = true;
 
     // Store undo animation info before changing index
@@ -178,11 +184,12 @@ export default function HomeScreen() {
       wasLeftSwipe: lastAction.wasLeftSwipe,
     });
 
-    // Go back to previous index (but don't unmark the image)
-    setCurrentIndex(previousIndex);
-
-    // Remove the last action from history (but keep the rest for further undos)
+    // Remove the last action from history first (before changing index)
     setHistory((prev) => prev.slice(0, -1));
+
+    // Go back to previous index (but don't unmark the image)
+    // Use a function to ensure we're using the correct value
+    setCurrentIndex(previousIndex);
 
     // Trigger animation after React has rendered the new card
     // Use a small timeout to ensure the card is in the DOM
@@ -193,11 +200,14 @@ export default function HomeScreen() {
     // Clear undo animation info and reset flag after animation completes
     setTimeout(() => {
       setUndoAnimationInfo(null);
-      isUndoingRef.current = false;
       // Save the position after undo is complete
       if (images[previousIndex]) {
         saveLastViewedImage(images[previousIndex].id);
       }
+      // Reset flag after everything is done
+      setTimeout(() => {
+        isUndoingRef.current = false;
+      }, 100);
     }, 400);
   };
 
