@@ -22,6 +22,11 @@ export default function HomeScreen() {
   const [history, setHistory] = useState<
     Array<{ index: number; wasLeftSwipe: boolean }>
   >([]);
+  const [undoAnimationTrigger, setUndoAnimationTrigger] = useState(0);
+  const [undoAnimationInfo, setUndoAnimationInfo] = useState<{
+    imageIndex: number;
+    wasLeftSwipe: boolean;
+  } | null>(null);
   const router = useRouter();
   const params = useLocalSearchParams<{ startImageId?: string }>();
   const {
@@ -119,11 +124,28 @@ export default function HomeScreen() {
       }
     }
 
+    // Store undo animation info before changing index
+    setUndoAnimationInfo({
+      imageIndex: previousIndex,
+      wasLeftSwipe: lastAction.wasLeftSwipe,
+    });
+
     // Go back to previous index
     setCurrentIndex(previousIndex);
 
     // Remove the last action from history (but keep the rest for further undos)
     setHistory((prev) => prev.slice(0, -1));
+
+    // Trigger animation after React has rendered the new card
+    // Use a small timeout to ensure the card is in the DOM
+    setTimeout(() => {
+      setUndoAnimationTrigger((prev) => prev + 1);
+    }, 50);
+
+    // Clear undo animation info after animation completes
+    setTimeout(() => {
+      setUndoAnimationInfo(null);
+    }, 400);
   };
 
   const handleCommitDeletion = async () => {
@@ -242,15 +264,32 @@ export default function HomeScreen() {
         <ThemedText style={styles.galleryButtonText}>📷 Gallery</ThemedText>
       </TouchableOpacity>
       <View style={styles.cardsContainer}>
-        {visibleCards.map((image, index) => (
-          <SwipeableCard
-            key={image.id}
-            imageUri={image.uri}
-            onSwipeLeft={handleSwipeLeft}
-            onSwipeRight={handleSwipeRight}
-            index={index}
-          />
-        ))}
+        {visibleCards.map((image, index) => {
+          // Check if this is the card that should animate back (the one we're undoing to)
+          // Only animate the top card (index 0) to prevent multiple animations
+          const shouldAnimateUndo =
+            undoAnimationInfo &&
+            index === 0 &&
+            currentIndex === undoAnimationInfo.imageIndex;
+
+          return (
+            <SwipeableCard
+              key={image.id}
+              imageUri={image.uri}
+              onSwipeLeft={handleSwipeLeft}
+              onSwipeRight={handleSwipeRight}
+              index={index}
+              undoAnimation={
+                shouldAnimateUndo
+                  ? {
+                      trigger: undoAnimationTrigger,
+                      wasLeftSwipe: undoAnimationInfo.wasLeftSwipe,
+                    }
+                  : null
+              }
+            />
+          );
+        })}
       </View>
       <View style={styles.infoContainer}>
         <ThemedText style={styles.instructionText}>
