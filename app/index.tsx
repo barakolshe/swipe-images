@@ -40,6 +40,8 @@ export default function HomeScreen() {
     imagesLoading,
     permissionGranted,
     refreshImages,
+    removeFromPersistedKeep,
+    removeFromPersistedDeletion,
   } = useImageSwipe();
 
   useEffect(() => {
@@ -155,6 +157,10 @@ export default function HomeScreen() {
     try {
       // Delete all marked assets from media library
       await MediaLibrary.deleteAssetsAsync(imageIdsToDelete);
+
+      // Remove deleted images from persisted storage (both keep and deletion)
+      await removeFromPersistedKeep(imageIdsToDelete);
+      await removeFromPersistedDeletion(imageIdsToDelete);
 
       // Refresh images from context to get updated list
       await refreshImages();
