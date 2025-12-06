@@ -28,6 +28,7 @@ export default function HomeScreen() {
     wasLeftSwipe: boolean;
   } | null>(null);
   const initialPositionLoadedRef = useRef(false);
+  const isUndoingRef = useRef(false);
   const router = useRouter();
   const params = useLocalSearchParams<{ startImageId?: string }>();
   const {
@@ -86,12 +87,13 @@ export default function HomeScreen() {
     });
   }, [imagesLoading, images.length, params.startImageId, loadLastViewedImage]);
 
-  // Save current image ID whenever index changes (but only after initial load)
+  // Save current image ID whenever index changes (but only after initial load and not during undo)
   useEffect(() => {
     if (
       !initialPositionLoadedRef.current ||
       images.length === 0 ||
-      currentIndex >= images.length
+      currentIndex >= images.length ||
+      isUndoingRef.current
     ) {
       return;
     }
@@ -161,13 +163,22 @@ export default function HomeScreen() {
     const lastAction = history[history.length - 1];
     const previousIndex = lastAction.index;
 
+    if (previousIndex >= images.length || previousIndex < 0) {
+      // Index no longer valid, just remove from history
+      setHistory((prev) => prev.slice(0, -1));
+      return;
+    }
+
+    // Set flag to prevent save effect from running during undo
+    isUndoingRef.current = true;
+
     // Store undo animation info before changing index
     setUndoAnimationInfo({
       imageIndex: previousIndex,
       wasLeftSwipe: lastAction.wasLeftSwipe,
     });
 
-    // Go back to previous index
+    // Go back to previous index (but don't unmark the image)
     setCurrentIndex(previousIndex);
 
     // Remove the last action from history (but keep the rest for further undos)
@@ -179,9 +190,14 @@ export default function HomeScreen() {
       setUndoAnimationTrigger((prev) => prev + 1);
     }, 50);
 
-    // Clear undo animation info after animation completes
+    // Clear undo animation info and reset flag after animation completes
     setTimeout(() => {
       setUndoAnimationInfo(null);
+      isUndoingRef.current = false;
+      // Save the position after undo is complete
+      if (images[previousIndex]) {
+        saveLastViewedImage(images[previousIndex].id);
+      }
     }, 400);
   };
 
