@@ -37,6 +37,7 @@ export function SwipeableCard({
   const translateY = useSharedValue(0);
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
+  const isUndoing = useSharedValue(0);
   const lastTriggerRef = useRef(0);
 
   // Handle undo animation
@@ -47,6 +48,9 @@ export function SwipeableCard({
       undoAnimation.trigger !== lastTriggerRef.current
     ) {
       lastTriggerRef.current = undoAnimation.trigger;
+
+      // Mark that we're undoing to suppress overlays
+      isUndoing.value = 1;
 
       // Start from the swiped position (off-screen)
       const startX = undoAnimation.wasLeftSwipe
@@ -74,6 +78,13 @@ export function SwipeableCard({
         duration: 300,
         easing: Easing.out(Easing.ease),
       });
+
+      // Reset isUndoing after animation completes
+      isUndoing.value = withTiming(0, {
+        duration: 300,
+        easing: Easing.out(Easing.ease),
+      });
+
       runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Light);
     }
   }, [undoAnimation?.trigger, undoAnimation?.wasLeftSwipe]);
@@ -133,16 +144,24 @@ export function SwipeableCard({
   });
 
   const leftOverlayStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(
+    const baseOpacity = interpolate(
       translateX.value,
       [-SWIPE_THRESHOLD, 0],
       [1, 0]
     );
+    // Hide overlay during undo animation
+    const opacity = isUndoing.value > 0 ? 0 : baseOpacity;
     return { opacity };
   });
 
   const rightOverlayStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(translateX.value, [0, SWIPE_THRESHOLD], [0, 1]);
+    const baseOpacity = interpolate(
+      translateX.value,
+      [0, SWIPE_THRESHOLD],
+      [0, 1]
+    );
+    // Hide overlay during undo animation
+    const opacity = isUndoing.value > 0 ? 0 : baseOpacity;
     return { opacity };
   });
 
