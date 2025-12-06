@@ -153,44 +153,20 @@ export function ImageSwipeProvider({ children }: { children: ReactNode }) {
       setMarkedForKeep(persistedKept);
       setMarkedForDeletion(persistedDeletion);
 
-      const albums = await MediaLibrary.getAlbumsAsync();
-
-      // Get all images from all albums
-      const allImages: ImageAsset[] = [];
-
-      for (const album of albums) {
-        const assets = await MediaLibrary.getAssetsAsync({
-          album: album,
-          mediaType: MediaLibrary.MediaType.photo,
-          first: 1000, // Adjust as needed
-        });
-
-        assets.assets.forEach((asset: MediaLibrary.Asset) => {
-          allImages.push({
-            id: asset.id,
-            uri: asset.uri,
-            creationTime: asset.creationTime,
-          });
-        });
-      }
-
-      // Also get images not in any album
+      // Get all images directly (no need to loop through albums)
       const allAssets = await MediaLibrary.getAssetsAsync({
         mediaType: MediaLibrary.MediaType.photo,
         first: 1000,
       });
 
-      allAssets.assets.forEach((asset: MediaLibrary.Asset) => {
-        if (!allImages.find((img) => img.id === asset.id)) {
-          allImages.push({
-            id: asset.id,
-            uri: asset.uri,
-            creationTime: asset.creationTime,
-          });
-        }
-      });
+      const allImages: ImageAsset[] = allAssets.assets.map(
+        (asset: MediaLibrary.Asset) => ({
+          id: asset.id,
+          uri: asset.uri,
+          creationTime: asset.creationTime,
+        })
+      );
 
-      // Don't filter - show all images with their persisted choices
       // Sort by creation time (newest first, like phone gallery)
       const sorted = allImages.sort((a, b) => b.creationTime - a.creationTime);
       setImages(sorted);

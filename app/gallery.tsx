@@ -3,6 +3,7 @@ import { ThemedView } from "@/components/themed-view";
 import { ImageAsset, useImageSwipe } from "@/contexts/image-swipe-context";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
+import React, { useCallback } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -17,31 +18,23 @@ const NUM_COLUMNS = 3;
 const GAP = 2;
 const ITEM_SIZE = (SCREEN_WIDTH - GAP * (NUM_COLUMNS + 1)) / NUM_COLUMNS;
 
-export default function GalleryScreen() {
-  const router = useRouter();
-  const {
-    markedForDeletion,
-    markedForKeep,
-    images,
-    imagesLoading,
-    permissionGranted,
-  } = useImageSwipe();
-
-  const handleImagePress = (imageId: string) => {
-    router.push({
-      pathname: "/",
-      params: { startImageId: imageId },
-    });
-  };
-
-  const renderItem = ({ item }: { item: ImageAsset }) => {
-    const isMarkedForDeletion = markedForDeletion.has(item.id);
-    const isMarkedForKeep = markedForKeep.has(item.id);
-
+// Memoized gallery item component
+const GalleryItem = React.memo(
+  ({
+    item,
+    isMarkedForDeletion,
+    isMarkedForKeep,
+    onPress,
+  }: {
+    item: ImageAsset;
+    isMarkedForDeletion: boolean;
+    isMarkedForKeep: boolean;
+    onPress: (imageId: string) => void;
+  }) => {
     return (
       <TouchableOpacity
         style={styles.imageContainer}
-        onPress={() => handleImagePress(item.id)}
+        onPress={() => onPress(item.id)}
         activeOpacity={0.7}
       >
         <Image
@@ -59,7 +52,47 @@ export default function GalleryScreen() {
         )}
       </TouchableOpacity>
     );
-  };
+  }
+);
+
+GalleryItem.displayName = "GalleryItem";
+
+export default function GalleryScreen() {
+  const router = useRouter();
+  const {
+    markedForDeletion,
+    markedForKeep,
+    images,
+    imagesLoading,
+    permissionGranted,
+  } = useImageSwipe();
+
+  const handleImagePress = useCallback(
+    (imageId: string) => {
+      router.push({
+        pathname: "/",
+        params: { startImageId: imageId },
+      });
+    },
+    [router]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: ImageAsset }) => {
+      const isMarkedForDeletion = markedForDeletion.has(item.id);
+      const isMarkedForKeep = markedForKeep.has(item.id);
+
+      return (
+        <GalleryItem
+          item={item}
+          isMarkedForDeletion={isMarkedForDeletion}
+          isMarkedForKeep={isMarkedForKeep}
+          onPress={handleImagePress}
+        />
+      );
+    },
+    [markedForDeletion, markedForKeep, handleImagePress]
+  );
 
   // Only show loading screen if we're actually loading AND don't have images
   if (imagesLoading && images.length === 0) {
@@ -117,6 +150,10 @@ export default function GalleryScreen() {
         contentContainerStyle={styles.listContent}
         columnWrapperStyle={styles.row}
         showsVerticalScrollIndicator={false}
+        removeClippedSubviews={false}
+        maxToRenderPerBatch={21}
+        windowSize={10}
+        initialNumToRender={21}
       />
     </ThemedView>
   );
