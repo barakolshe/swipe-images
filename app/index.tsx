@@ -28,6 +28,13 @@ export default function HomeScreen() {
     imageIndex: number;
     wasLeftSwipe: boolean;
   } | null>(null);
+  const [programmaticSwipeTrigger, setProgrammaticSwipeTrigger] = useState(0);
+  const [programmaticSwipeDirection, setProgrammaticSwipeDirection] = useState<
+    "left" | "right" | null
+  >(null);
+  const [programmaticSwipeImageId, setProgrammaticSwipeImageId] = useState<
+    string | null
+  >(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const initialPositionLoadedRef = useRef(false);
   const isUndoingRef = useRef(false);
@@ -209,6 +216,44 @@ export default function HomeScreen() {
     });
   };
 
+  const handleButtonSwipeLeft = () => {
+    if (isUndoingRef.current) return;
+    if (currentIndex >= images.length) return;
+    
+    const currentImage = images[currentIndex];
+    if (!currentImage) return;
+    
+    // Trigger the animation for this specific image
+    setProgrammaticSwipeImageId(currentImage.id);
+    setProgrammaticSwipeDirection("left");
+    setProgrammaticSwipeTrigger((prev) => prev + 1);
+    
+    // Reset after animation completes
+    setTimeout(() => {
+      setProgrammaticSwipeDirection(null);
+      setProgrammaticSwipeImageId(null);
+    }, 500);
+  };
+
+  const handleButtonSwipeRight = () => {
+    if (isUndoingRef.current) return;
+    if (currentIndex >= images.length) return;
+    
+    const currentImage = images[currentIndex];
+    if (!currentImage) return;
+    
+    // Trigger the animation for this specific image
+    setProgrammaticSwipeImageId(currentImage.id);
+    setProgrammaticSwipeDirection("right");
+    setProgrammaticSwipeTrigger((prev) => prev + 1);
+    
+    // Reset after animation completes
+    setTimeout(() => {
+      setProgrammaticSwipeDirection(null);
+      setProgrammaticSwipeImageId(null);
+    }, 500);
+  };
+
   const handleUndo = () => {
     if (history.length === 0) {
       Alert.alert("Nothing to undo", "You haven't swiped any images yet.");
@@ -292,7 +337,6 @@ export default function HomeScreen() {
     const currentImageId = images[currentIndex]?.id;
     const markedSet = new Set(markedForDeletion);
     const oldImages = [...images]; // Keep a copy of current images for calculations
-    const oldHistory = [...history]; // Keep a copy of history to preserve it
 
     // Check if current image is being deleted
     const isCurrentImageDeleted =
@@ -342,30 +386,11 @@ export default function HomeScreen() {
       // Refresh images from context to get updated list
       await refreshImages();
 
-      // Clear the marked set but preserve history
+      // Clear the marked set and reset history
       clearDeletion();
-
-      // Filter history to remove entries for deleted images and adjust indices
-      // We'll update history after images are refreshed in the useEffect
-      const updatedHistory = oldHistory
-        .map((entry) => {
-          // Get the image that was at this entry's index in the old images array
-          const imageAtEntry = oldImages[entry.index];
-          // If the image at this entry was deleted, return null to filter it out
-          if (!imageAtEntry || markedSet.has(imageAtEntry.id)) {
-            return null;
-          }
-          // We'll update indices after images refresh
-          return entry;
-        })
-        .filter(
-          (entry): entry is { index: number; wasLeftSwipe: boolean } =>
-            entry !== null
-        );
-
-      // Update history indices after images refresh (will be done in useEffect)
-      // For now, just store the filtered history
-      setHistory(updatedHistory);
+      
+      // Reset undo history when deleting
+      setHistory([]);
 
       // Check if all images were deleted
       const remainingCount = oldImages.filter(
@@ -442,6 +467,7 @@ export default function HomeScreen() {
             <SwipeableCard
               key={image.id}
               imageUri={image.uri}
+              imageId={image.id}
               onSwipeLeft={handleSwipeLeft}
               onSwipeRight={handleSwipeRight}
               index={index}
@@ -453,20 +479,19 @@ export default function HomeScreen() {
                     }
                   : null
               }
+              programmaticSwipe={
+                programmaticSwipeDirection && programmaticSwipeImageId === image.id
+                  ? {
+                      trigger: programmaticSwipeTrigger,
+                      isLeft: programmaticSwipeDirection === "left",
+                      imageId: programmaticSwipeImageId,
+                    }
+                  : null
+              }
             />
           );
         })}
       </View>
-      {markedForDeletion.size > 0 && (
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={handleCommitDeletion}
-        >
-          <ThemedText style={styles.deleteButtonText}>
-            Delete {markedForDeletion.size} Image(s)
-          </ThemedText>
-        </TouchableOpacity>
-      )}
       <View style={styles.bottomButtonsContainer}>
         <View style={styles.buttonSection}>
           {history.length > 0 && (
@@ -478,7 +503,7 @@ export default function HomeScreen() {
         <View style={styles.buttonSection}>
           <TouchableOpacity
             style={styles.rejectButton}
-            onPress={handleSwipeLeft}
+            onPress={handleButtonSwipeLeft}
           >
             <FontAwesome5 name="times" size={40} color="#fff" />
           </TouchableOpacity>
@@ -487,12 +512,26 @@ export default function HomeScreen() {
         <View style={styles.buttonSection}>
           <TouchableOpacity
             style={styles.likeButton}
-            onPress={handleSwipeRight}
+            onPress={handleButtonSwipeRight}
           >
             <FontAwesome5 name="heart" size={40} color="#fff" />
           </TouchableOpacity>
         </View>
-        <View style={styles.buttonSection} />
+        <View style={styles.buttonSection}>
+          {markedForDeletion.size > 0 && (
+            <TouchableOpacity
+              style={styles.deleteIconButton}
+              onPress={handleCommitDeletion}
+            >
+              <FontAwesome5 name="trash" size={32} color="#fff" />
+              <View style={styles.badge}>
+                <ThemedText style={styles.badgeText}>
+                  {markedForDeletion.size}
+                </ThemedText>
+              </View>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
       <BottomNavBar />
     </ThemedView>
@@ -536,22 +575,41 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 20,
   },
-  deleteButton: {
-    position: "absolute",
-    bottom: 180,
-    alignSelf: "center",
+  deleteIconButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: "#ff4444",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 25,
-    minWidth: 200,
     alignItems: "center",
-    zIndex: 1000,
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    position: "relative",
   },
-  deleteButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
+  badge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+    borderWidth: 2,
+    borderColor: "#ff4444",
+  },
+  badgeText: {
+    color: "#ff4444",
+    fontSize: 12,
+    fontWeight: "700",
   },
   bottomButtonsContainer: {
     position: "absolute",

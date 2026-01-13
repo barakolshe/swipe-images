@@ -20,18 +20,22 @@ const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.3;
 
 type SwipeableCardProps = {
   imageUri: string;
+  imageId: string;
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
   index: number;
   undoAnimation?: { trigger: number; wasLeftSwipe: boolean } | null;
+  programmaticSwipe?: { trigger: number; isLeft: boolean; imageId: string } | null;
 };
 
 export function SwipeableCard({
   imageUri,
+  imageId,
   onSwipeLeft,
   onSwipeRight,
   index,
   undoAnimation,
+  programmaticSwipe,
 }: SwipeableCardProps) {
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
@@ -39,6 +43,7 @@ export function SwipeableCard({
   const opacity = useSharedValue(1);
   const isUndoing = useSharedValue(0);
   const lastTriggerRef = useRef(0);
+  const lastProgrammaticSwipeRef = useRef(0);
 
   // Handle undo animation
   useEffect(() => {
@@ -88,6 +93,33 @@ export function SwipeableCard({
       runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Light);
     }
   }, [undoAnimation?.trigger, undoAnimation?.wasLeftSwipe]);
+
+  // Handle programmatic swipe (from button press)
+  useEffect(() => {
+    if (
+      programmaticSwipe &&
+      programmaticSwipe.trigger > 0 &&
+      programmaticSwipe.trigger !== lastProgrammaticSwipeRef.current &&
+      programmaticSwipe.imageId === imageId // Only animate if this is the target image
+    ) {
+      lastProgrammaticSwipeRef.current = programmaticSwipe.trigger;
+
+      // Animate the card off-screen
+      if (programmaticSwipe.isLeft) {
+        translateX.value = withSpring(-SCREEN_WIDTH * 2);
+        translateY.value = withSpring(0);
+        opacity.value = withSpring(0);
+        runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Medium);
+        runOnJS(onSwipeLeft)();
+      } else {
+        translateX.value = withSpring(SCREEN_WIDTH * 2);
+        translateY.value = withSpring(0);
+        opacity.value = withSpring(0);
+        runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Medium);
+        runOnJS(onSwipeRight)();
+      }
+    }
+  }, [programmaticSwipe?.trigger, programmaticSwipe?.isLeft, programmaticSwipe?.imageId, imageId]);
 
   const panGesture = Gesture.Pan()
     .onUpdate((event) => {
