@@ -37,7 +37,7 @@ export default function HomeScreen() {
   const {
     markedForDeletion,
     markForDeletion,
-    markForKeep,
+    markForKeep, 
     unmarkForDeletion,
     unmarkForKeep,
     clearAll,
@@ -228,6 +228,18 @@ export default function HomeScreen() {
       // Index no longer valid, just remove from history
       setHistory((prev) => prev.slice(0, -1));
       return;
+    }
+
+    // Get the image to unmark
+    const imageToUnmark = images[previousIndex];
+    
+    // Unmark the image based on the swipe direction
+    if (lastAction.wasLeftSwipe) {
+      // Left swipe = marked for deletion, so unmark from deletion
+      unmarkForDeletion(imageToUnmark.id);
+    } else {
+      // Right swipe = marked for keep, so unmark from keep
+      unmarkForKeep(imageToUnmark.id);
     }
 
     // Set flag to prevent save effect and other operations from running during undo
