@@ -13,9 +13,9 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const CARD_WIDTH = SCREEN_WIDTH * 0.9;
-const CARD_HEIGHT = SCREEN_WIDTH * 1.2;
+const CARD_HEIGHT = SCREEN_HEIGHT * 0.65;
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.3;
 
 type SwipeableCardProps = {

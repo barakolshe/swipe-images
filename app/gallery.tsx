@@ -1,5 +1,6 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { BottomNavBar } from "@/components/bottom-nav-bar";
 import { ImageAsset, useImageSwipe } from "@/contexts/image-swipe-context";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
@@ -17,6 +18,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const NUM_COLUMNS = 3;
 const GAP = 2;
 const ITEM_SIZE = (SCREEN_WIDTH - GAP * (NUM_COLUMNS + 1)) / NUM_COLUMNS;
+const BOTTOM_NAV_HEIGHT = 77; // Height of bottom navigation bar
 
 // Memoized gallery item component
 const GalleryItem = React.memo(
@@ -155,6 +157,7 @@ export default function GalleryScreen() {
         windowSize={10}
         initialNumToRender={21}
       />
+      <BottomNavBar />
     </ThemedView>
   );
 }
@@ -163,6 +166,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingTop: 60,
+    paddingBottom: BOTTOM_NAV_HEIGHT,
   },
   header: {
     paddingHorizontal: 16,

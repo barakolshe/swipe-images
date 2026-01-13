@@ -1,3 +1,4 @@
+import { BottomNavBar } from "@/components/bottom-nav-bar";
 import { SwipeableCard } from "@/components/swipeable-card";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -428,19 +429,6 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {history.length > 0 && (
-        <TouchableOpacity style={styles.undoButton} onPress={handleUndo}>
-          <View>
-            <FontAwesome5 name="undo" size={32} color="#4CAF50" />
-          </View>
-        </TouchableOpacity>
-      )}
-      <TouchableOpacity
-        style={styles.galleryButton}
-        onPress={() => router.push("/gallery")}
-      >
-        <ThemedText style={styles.galleryButtonText}>📷 Gallery</ThemedText>
-      </TouchableOpacity>
       <View style={styles.cardsContainer}>
         {visibleCards.map((image, index) => {
           // Check if this is the card that should animate back (the one we're undoing to)
@@ -469,29 +457,49 @@ export default function HomeScreen() {
           );
         })}
       </View>
-      <View style={styles.infoContainer}>
-        <ThemedText style={styles.instructionText}>
-          Swipe left to mark for deletion • Swipe right to keep
-        </ThemedText>
-        {markedForDeletion.size > 0 && (
-          <ThemedText style={styles.markedCountText}>
-            {markedForDeletion.size} image(s) marked for deletion
+      {markedForDeletion.size > 0 && (
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={handleCommitDeletion}
+        >
+          <ThemedText style={styles.deleteButtonText}>
+            Delete {markedForDeletion.size} Image(s)
           </ThemedText>
-        )}
-        {markedForDeletion.size > 0 && (
+        </TouchableOpacity>
+      )}
+      <View style={styles.bottomButtonsContainer}>
+        <View style={styles.buttonSection}>
+          {history.length > 0 && (
+            <TouchableOpacity style={styles.undoButton} onPress={handleUndo}>
+              <FontAwesome5 name="undo" size={32} color="#000" />
+            </TouchableOpacity>
+          )}
+        </View>
+        <View style={styles.buttonSection}>
           <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={handleCommitDeletion}
+            style={styles.rejectButton}
+            onPress={handleSwipeLeft}
           >
-            <ThemedText style={styles.deleteButtonText}>
-              Delete {markedForDeletion.size} Image(s)
-            </ThemedText>
+            <FontAwesome5 name="times" size={40} color="#fff" />
           </TouchableOpacity>
-        )}
+        </View>
+        <View style={styles.buttonSection} />
+        <View style={styles.buttonSection}>
+          <TouchableOpacity
+            style={styles.likeButton}
+            onPress={handleSwipeRight}
+          >
+            <FontAwesome5 name="heart" size={40} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.buttonSection} />
       </View>
+      <BottomNavBar />
     </ThemedView>
   );
 }
+
+const BOTTOM_NAV_HEIGHT = 77; // Height of bottom navigation bar
 
 const styles = StyleSheet.create({
   container: {
@@ -499,17 +507,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingTop: 60,
+    paddingBottom: BOTTOM_NAV_HEIGHT,
   },
   cardsContainer: {
     width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT * 0.7,
+    height: SCREEN_HEIGHT * 0.65,
     alignItems: "center",
     justifyContent: "center",
-  },
-  infoContainer: {
-    position: "absolute",
-    bottom: 60,
-    alignItems: "center",
+    marginBottom: SCREEN_HEIGHT * 0.02 + BOTTOM_NAV_HEIGHT,
   },
   infoText: {
     fontSize: 18,
@@ -531,49 +536,45 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 20,
   },
-  galleryButton: {
-    position: "absolute",
-    top: 60,
-    right: 20,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    zIndex: 1000,
-  },
-  galleryButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  markedCountText: {
-    fontSize: 14,
-    opacity: 0.8,
-    marginTop: 8,
-    color: "#ff4444",
-  },
   deleteButton: {
-    marginTop: 16,
+    position: "absolute",
+    bottom: 180,
+    alignSelf: "center",
     backgroundColor: "#ff4444",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 25,
     minWidth: 200,
     alignItems: "center",
+    zIndex: 1000,
   },
   deleteButtonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
   },
-  undoButton: {
+  bottomButtonsContainer: {
     position: "absolute",
-    top: 60,
-    left: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
-    padding: 12,
-    borderRadius: 25,
+    bottom: SCREEN_HEIGHT * 0.04 + BOTTOM_NAV_HEIGHT,
+    width: SCREEN_WIDTH,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
     zIndex: 1000,
+  },
+  buttonSection: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  undoButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#FFC107",
+    alignItems: "center",
+    justifyContent: "center",
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
@@ -583,7 +584,36 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
   },
-  undoIconContainer: {
-    transform: [{ rotate: "180deg" }],
+  rejectButton: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: "#ff4444",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  likeButton: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: "#4CAF50",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
 });
