@@ -18,7 +18,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
         <ImageSwipeProvider>
-          <Stack>
+          <Stack screenOptions={{ animation: 'none' }}>
             <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen name="gallery" options={{ headerShown: false }} />
             <Stack.Screen name="account" options={{ headerShown: false }} />
