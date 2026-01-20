@@ -7,6 +7,7 @@ import Purchases, {
   PurchasesOffering,
   PurchasesPackage
 } from 'react-native-purchases';
+import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 
 // Entitlement identifier for SwipeImages Pro
 const PRO_ENTITLEMENT_ID = 'SwipeImages Pro';
@@ -27,15 +28,13 @@ interface SubscriptionState {
   customerInfo: CustomerInfo | null;
   offerings: PurchasesOffering | null;
   availablePackages: PurchasesPackage[];
-  // Paywall modal state
-  isPaywallVisible: boolean;
-  showPaywall: () => void;
-  hidePaywall: () => void;
   // Subscription management
   upgradeToPro: () => Promise<void>;
   purchasePackage: (pkg: PurchasesPackage) => Promise<void>;
   restorePurchases: () => Promise<void>;
   refreshSubscriptionStatus: () => Promise<void>;
+  // Paywall
+  presentPaywall: () => Promise<boolean>;
   // Customer Center
   presentCustomerCenter: () => Promise<void>;
   // Package getters
@@ -60,7 +59,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
   const [offerings, setOfferings] = useState<PurchasesOffering | null>(null);
   const [availablePackages, setAvailablePackages] = useState<PurchasesPackage[]>([]);
-  const [isPaywallVisible, setIsPaywallVisible] = useState(false);
 
   // Initialize RevenueCat
   useEffect(() => {
@@ -171,13 +169,10 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       const proEntitlement = updatedCustomerInfo.entitlements.active[PRO_ENTITLEMENT_ID];
       
       if (proEntitlement && proEntitlement.isActive) {
-        // Close paywall on successful purchase
-        hidePaywall();
         Alert.alert('Success! 🎉', 'You now have access to SwipeImages Pro!');
       } else {
         // Refresh to get latest state
         await refreshSubscriptionStatus();
-        hidePaywall();
         Alert.alert('Purchase Complete', 'Your purchase was successful.');
       }
       
@@ -214,16 +209,50 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   };
 
   const upgradeToPro = async () => {
-    // Show the custom paywall modal
-    showPaywall();
+    try {
+      // Try to present the paywall first
+      await presentPaywallForUpgrade();
+    } catch (error: any) {
+      console.error('❌ Error in upgradeToPro:', error);
+      
+      // If paywall fails, try to purchase the yearly package as default
+      const yearlyPackage = getYearlyPackage();
+      if (yearlyPackage) {
+        await purchasePackage(yearlyPackage);
+      } else {
+        Alert.alert('Error', 'No subscription packages available. Please try again later.');
+      }
+    }
   };
 
-  const showPaywall = () => {
-    setIsPaywallVisible(true);
-  };
-
-  const hidePaywall = () => {
-    setIsPaywallVisible(false);
+  const presentPaywallForUpgrade = async (): Promise<boolean> => {
+    try {
+      // Present paywall for current offering (or optionally specify an offering)
+      console.log('🔄 Presenting paywall for upgrade');
+      const paywallResult: PAYWALL_RESULT = await RevenueCatUI.presentPaywall();
+      
+      // Handle the result
+      switch (paywallResult) {
+        case PAYWALL_RESULT.NOT_PRESENTED:
+        case PAYWALL_RESULT.ERROR:
+        case PAYWALL_RESULT.CANCELLED:
+          return false;
+        case PAYWALL_RESULT.PURCHASED:
+        case PAYWALL_RESULT.RESTORED:
+          // Refresh subscription status after successful purchase/restore
+          await refreshSubscriptionStatus();
+          return true;
+        default:
+          return false;
+      }
+    } catch (error: any) {
+      console.error('❌ Error presenting paywall:', error);
+      Alert.alert(
+        'Error', 
+        error.message || 'Failed to load subscription options. Please try again later.'
+      );
+      return false;
+    }
   };
 
   const presentCustomerCenter = async () => {
@@ -315,13 +344,11 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         customerInfo,
         offerings,
         availablePackages,
-        isPaywallVisible,
-        showPaywall,
-        hidePaywall,
         upgradeToPro,
         purchasePackage,
         restorePurchases,
         refreshSubscriptionStatus,
+        presentPaywall: presentPaywallForUpgrade,
         presentCustomerCenter,
         getMonthlyPackage,
         getYearlyPackage,

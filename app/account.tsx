@@ -8,10 +8,10 @@ import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 const BOTTOM_NAV_HEIGHT = 77; // Height of bottom navigation bar
 
 export default function AccountScreen() {
-  const { showPaywall } = useSubscription();
+  const { presentPaywall } = useSubscription();
 
-  const handleSubscriptionsPress = () => {
-    showPaywall();
+  const handleSubscriptionsPress = async () => {
+    await presentPaywall();
   };
 
   const menuItems = [
